@@ -35,7 +35,7 @@ MANIFEST
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
-
+*.csv
 # Unit test / coverage reports
 htmlcov/
 .tox/
@@ -169,3 +169,4 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+/src/train/catboost_info/

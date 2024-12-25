@@ -1,19 +1,33 @@
 import pandas as pd
 import numpy as np
+import psycopg2
 from sklearn.metrics.pairwise import cosine_similarity
 import joblib
 
 
 class Recommender:
-    def __init__(self, model_path: str, overview_path: str, ratings_path: str):
+    def __init__(self, model_path: str, overview_path: str):
+        self.connection = psycopg2.connect(
+            host="localhost",
+            port="5432",
+            database="mldata",
+            user="anton",
+            password="1234"
+        )
         # Загрузка модели
         self.model = joblib.load(model_path)
 
         # Загрузка векторных представлений фильмов
         self.overview_df = pd.read_csv(overview_path)
 
-        # Загрузка оценок
-        self.ratings = pd.read_csv(ratings_path)
+        # Выполнение SQL-запроса для загрузки оценок
+        ratings_query = "SELECT userId, movieId, rating, \"timestamp\" FROM ratings"
+        self.ratings = pd.read_sql_query(ratings_query, self.connection)
+
+        movies_query = "SELECT movieId,title,genres FROM movies"
+        self.movies = pd.read_sql_query(movies_query, self.connection)
+
+        self.data = self.ratings.merge(self.movies, on="movieId")
 
         # Вычисление пользовательских предпочтений
         self.user_preferences = self.ratings.groupby('userId').agg(
@@ -48,7 +62,7 @@ class Recommender:
         """
         # Проверка наличия пользователя
         if user_id not in self.ratings['userId'].unique():
-            raise ValueError(f"User with ID {user_id} not found.")
+            return self.cold_search(num_recommendations)
 
         # Фильтрация фильмов, которые пользователь уже оценил
         user_rated_movies = self.ratings[self.ratings['userId'] == user_id]['movieId'].unique()
@@ -57,7 +71,7 @@ class Recommender:
         # Получение вектора предпочтений пользователя
         user_liked_vector_row = self.liked_movies[self.liked_movies['userId'] == user_id]
         if user_liked_vector_row.empty:
-            raise ValueError(f"Insufficient data to generate recommendations for user ID {user_id}.")
+            return self.cold_search(num_recommendations)
 
         user_liked_vector = np.array(user_liked_vector_row['liked_vector'].values[0]).reshape(1, -1)
 
@@ -88,3 +102,22 @@ class Recommender:
 
         # Формирование результата
         return recommendations.to_dict(orient='records')
+
+    def cold_search(self, num_recommendations):
+        # Calculate the average rating and number of ratings for each movie
+        movie_stats = self.data.groupby("title").agg(
+            avg_rating=("rating", "mean"),  # Средний рейтинг
+            num_ratings=("rating", "count")  # Количество оценок
+        ).reset_index()
+
+        # Filter movies with average rating >= 4.00
+        high_rated_movies = movie_stats[movie_stats["avg_rating"] >= 4.00]
+
+        # Sort movies by number of ratings in descending order
+        sorted_movies = high_rated_movies.sort_values(by="num_ratings", ascending=False)
+
+        # Get the top N movies
+        top_movies = sorted_movies.head(num_recommendations)
+
+        # Return only the list of movie titles
+        return top_movies["title"].tolist()
