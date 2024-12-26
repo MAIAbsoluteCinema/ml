@@ -19,7 +19,7 @@ OVERVIEW_PATH = "../data/overview_vectors.csv"  # Укажите правиль�
 RATINGS_PATH = "../data/rating.csv"  # Укажите правильный путь к файлу с рейтингами
 
 # Создание экземпляра recommender с нужными путями к данным
-recommender = Recommender(MODEL_PATH, OVERVIEW_PATH, RATINGS_PATH)
+recommender = Recommender(MODEL_PATH, OVERVIEW_PATH)
 
 @app.get("/")
 def read_root():
