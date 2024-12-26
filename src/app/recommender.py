@@ -10,9 +10,9 @@ class Recommender:
         self.connection = psycopg2.connect(
             host="localhost",
             port="5432",
-            database="mldata",
-            user="anton",
-            password="1234"
+            database="postgres",
+            user="user",
+            password="psswd"
         )
         # Загрузка модели
         self.model = joblib.load(model_path)
@@ -21,16 +21,16 @@ class Recommender:
         self.overview_df = pd.read_csv(overview_path)
 
         # Выполнение SQL-запроса для загрузки оценок
-        ratings_query = "SELECT userId, movieId, rating, \"timestamp\" FROM ratings"
+        ratings_query = "SELECT userid,  movieid as movieid, rating FROM rating"
         self.ratings = pd.read_sql_query(ratings_query, self.connection)
 
-        movies_query = "SELECT movieId,title,genres FROM movies"
+        movies_query = "SELECT movieid as movieid, title, genres FROM movies"
         self.movies = pd.read_sql_query(movies_query, self.connection)
 
-        self.data = self.ratings.merge(self.movies, on="movieId")
+        self.data = self.ratings.merge(self.movies, on="movieid")
 
         # Вычисление пользовательских предпочтений
-        self.user_preferences = self.ratings.groupby('userId').agg(
+        self.user_preferences = self.ratings.groupby('userid').agg(
             avg_rating=('rating', 'mean'),
             num_ratings=('rating', 'count')
         ).reset_index()
@@ -48,28 +48,28 @@ class Recommender:
 
         # Группируем понравившиеся фильмы для каждого пользователя
         liked_movies = self.ratings[self.ratings['target'] == 1].merge(
-            self.overview_df, on='movieId', how='inner'
-        ).groupby('userId')[self.vector_columns].mean().reset_index()
+            self.overview_df, on='movieid', how='inner'
+        ).groupby('userid')[self.vector_columns].mean().reset_index()
 
         # Создаём колонку liked_vector
         liked_movies['liked_vector'] = liked_movies[self.vector_columns].values.tolist()
 
-        return liked_movies[['userId', 'liked_vector']]
+        return liked_movies[['userid', 'liked_vector']]
 
     def get_recommendations(self, user_id: int, num_recommendations: int = 5):
         """
         Рекомендует фильмы для пользователя на основе модели CatBoost и сходства с векторами.
         """
         # Проверка наличия пользователя
-        if user_id not in self.ratings['userId'].unique():
+        if user_id not in self.ratings['userid'].unique():
             return self.cold_search(num_recommendations)
 
         # Фильтрация фильмов, которые пользователь уже оценил
-        user_rated_movies = self.ratings[self.ratings['userId'] == user_id]['movieId'].unique()
-        unrated_movies = self.overview_df[~self.overview_df['movieId'].isin(user_rated_movies)]
+        user_rated_movies = self.ratings[self.ratings['userid'] == user_id]['movieid'].unique()
+        unrated_movies = self.overview_df[~self.overview_df['movieid'].isin(user_rated_movies)]
 
         # Получение вектора предпочтений пользователя
-        user_liked_vector_row = self.liked_movies[self.liked_movies['userId'] == user_id]
+        user_liked_vector_row = self.liked_movies[self.liked_movies['userid'] == user_id]
         if user_liked_vector_row.empty:
             return self.cold_search(num_recommendations)
 
@@ -81,7 +81,7 @@ class Recommender:
         unrated_movies['similarity_to_user'] = similarities
 
         # Добавление пользовательских метрик
-        user_preferences_row = self.user_preferences[self.user_preferences['userId'] == user_id]
+        user_preferences_row = self.user_preferences[self.user_preferences['userid'] == user_id]
         avg_rating = user_preferences_row['avg_rating'].iloc[0] if not user_preferences_row.empty else 0
         num_ratings = user_preferences_row['num_ratings'].iloc[0] if not user_preferences_row.empty else 0
         unrated_movies['avg_rating'] = avg_rating
@@ -97,9 +97,8 @@ class Recommender:
 
         # Сортировка фильмов по вероятности
         recommendations = (
-            unrated_movies.nlargest(num_recommendations, 'predicted_probability')[['movieId', 'predicted_probability']]
+            unrated_movies.nlargest(num_recommendations, 'predicted_probability')[['movieid', 'predicted_probability']]
         )
-
         # Формирование результата
         return recommendations.to_dict(orient='records')
 
@@ -120,4 +119,4 @@ class Recommender:
         top_movies = sorted_movies.head(num_recommendations)
 
         # Return only the list of movie titles
-        return top_movies["title"].tolist()
+        return top_movies.to_dict(orient='records')

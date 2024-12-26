@@ -1,3 +1,4 @@
+import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from recommender import Recommender
@@ -15,8 +16,8 @@ class RecommendationRequest(BaseModel):
 
 # Пути к файлам модели и данных
 MODEL_PATH = "catboost_recommender.pkl"  # Укажите правильный путь к файлу модели
-OVERVIEW_PATH = "../data/overview_vectors.csv"  # Укажите правильный путь к векторным данным фильмов
-RATINGS_PATH = "../data/rating.csv"  # Укажите правильный путь к файлу с рейтингами
+OVERVIEW_PATH = "../resources/overview_vectors.csv"  # Укажите правильный путь к векторным данным фильмов
+  # Укажите правильный путь к файлу с рейтингами
 
 # Создание экземпляра recommender с нужными путями к данным
 recommender = Recommender(MODEL_PATH, OVERVIEW_PATH)
@@ -33,3 +34,6 @@ async def get_recommendations(request: RecommendationRequest):
         return recommendations
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8081)

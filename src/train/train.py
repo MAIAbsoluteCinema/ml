@@ -27,7 +27,7 @@ merged_movies = pd.read_csv("../resources/merged_movies.csv").sample(frac=0.1, r
 print("Удаление дубликатов")
 ratings = ratings.drop_duplicates()
 merged_movies = merged_movies.drop_duplicates()
-
+merged_movies = merged_movies.dropna(subset=['movieId'])
 print("Разбиение жанров на отдельные метки")
 merged_movies['genres'] = merged_movies['genres'].apply(lambda x: x.split('|'))
 
@@ -36,7 +36,7 @@ mlb = MultiLabelBinarizer()
 genres_encoded = mlb.fit_transform(merged_movies['genres'])
 genres_df = pd.DataFrame(genres_encoded, columns=mlb.classes_)
 merged_movies = pd.concat([merged_movies, genres_df], axis=1).drop(columns=['genres'])
-
+merged_movies = merged_movies.dropna(subset=['movieId'])
 print("Подготовка описаний для обучения Word2Vec")
 merged_movies['overview'] = merged_movies['overview'].fillna('').apply(remove_stopwords)
 merged_movies['overview_tokens'] = merged_movies['overview'].fillna('').apply(lambda x: x.split())
@@ -58,6 +58,7 @@ print("Преобразование списка векторов в DataFrame")
 overview_vectors = np.vstack(merged_movies['overview_vector'].values)
 overview_df = pd.DataFrame(overview_vectors, columns=[f'feature_{i}' for i in range(overview_vectors.shape[1])])
 overview_df['movieId'] = merged_movies['movieId']
+overview_df = overview_df.dropna(subset=['movieId'])
 
 print("Сохраняем векторные представления фильмов")
 overview_df.to_csv("../resources/overview_vectors.csv", index=False)
